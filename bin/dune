@@ -1,0 +1,11 @@
+(executable
+  (name client)
+  (public_name client)
+  (modules client)
+  (libraries lwt lwt.unix ANSITerminal))
+
+(executable
+  (name server)
+  (public_name server)
+  (modules server)
+  (libraries lwt lwt.unix ANSITerminal str))

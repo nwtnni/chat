@@ -51,8 +51,8 @@ and loop socket =
 
 (** Accept a new client connection and spawn a listening thread. *)
 and accept (file, addr) =
-  let ic = Lwt_io.of_fd Lwt_io.Input file in
-  let oc = Lwt_io.of_fd Lwt_io.Output file in
+  let ic = Lwt_io.of_fd ~mode:Lwt_io.Input file in
+  let oc = Lwt_io.of_fd ~mode:Lwt_io.Output file in
   Lwt.async (fun () -> initialize addr ic oc);
   Lwt.return ()
 

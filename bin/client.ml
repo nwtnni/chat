@@ -8,8 +8,8 @@ let rec connect addr port =
 
 (** Start the read-write connection to the server. *)
 and loop sock =
-  let ic = Lwt_io.of_fd Lwt_io.Input sock in
-  let oc = Lwt_io.of_fd Lwt_io.Output sock in
+  let ic = Lwt_io.of_fd ~mode:Lwt_io.Input sock in
+  let oc = Lwt_io.of_fd ~mode:Lwt_io.Output sock in
   Lwt.choose [read ic; register oc]
 
 (** Send a nickname to the server. *)
@@ -44,7 +44,7 @@ and send oc =
 (** Parse either a domain name or an IP address. *)
 let parse_addr name =
   try (Unix.gethostbyname name).h_addr_list.(0)
-  with exn -> Unix.inet_addr_of_string name
+  with _ -> Unix.inet_addr_of_string name
 
 (** Main entry point. *)
 let main () =
@@ -56,4 +56,4 @@ let main () =
 
 (** Catch missing command-line arguments. *)
 let () =
-  try main () with exn -> print_endline "Usage: ./client.byte <SERVER> <PORT>"
+  try main () with _ -> print_endline "Usage: ./client.byte <SERVER> <PORT>"

@@ -3,8 +3,19 @@ open Chat
 
 module AT = ANSITerminal
 
+(** Main entry point *)
+let rec main () =
+  let port = 10000 in
+  let sock = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_STREAM 0 in
+  let addr = Lwt_unix.ADDR_INET (Unix.inet_addr_any, port) in
+  Lwt_main.run begin
+    Lwt_unix.bind sock addr
+    >|= (fun () -> Lwt_unix.listen sock 100)
+    >>= (fun () -> loop sock)
+  end
+
 (** Continously accept new client connections. *)
-let rec loop socket =
+and loop socket =
   Lwt_unix.accept socket >>= accept >>= fun () -> loop socket
 
 (** Accept a new client connection and spawn a listening thread. *)
@@ -69,15 +80,15 @@ and help addr =
   Connected.find addr >> fun (_, oc) ->
   Lwt_io.fprintf oc
     "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n"
-    "-----------------------------------------------"
+    "-- --------------------------------------------"
     (fmt_server "-- Welcome to lwt-chatroom! Commands are below.")
-    "-----------------------------------------------"
+    "-- --------------------------------------------"
     "-- | [q]uit        : Exit chatroom"
     "-- | [h]elp        : Display commands"
     "-- | [l]ist        : List connected clients"
     "-- | [n]ick name   : Change name to [name]"
     "-- | [c]olor color : Change color to [color]"
-    "-----------------------------------------------"
+    "-- --------------------------------------------"
     (Printf.sprintf "-- Where color is one of\n-- - %s\n-- - %s\n-- - %s\n-- - %s\n-- - %s\n-- - %s"
       (AT.sprintf [AT.Bold; AT.green] "green")
       (AT.sprintf [AT.Bold; AT.yellow] "yellow")
@@ -191,12 +202,4 @@ and fmt_time message =
     message
 
 (** Main entrypoint. Bind socket to server and loop over new connections. *)
-let () =
-  let port = 10000 in
-  let sock = Lwt_unix.socket Lwt_unix.PF_INET Lwt_unix.SOCK_STREAM 0 in
-  let addr = Lwt_unix.ADDR_INET (Unix.inet_addr_any, port) in
-  Lwt_main.run begin
-    Lwt_unix.bind sock addr
-    >|= (fun () -> Lwt_unix.listen sock 100)
-    >>= (fun () -> loop sock)
-  end
+let () = main ()

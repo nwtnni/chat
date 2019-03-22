@@ -16,6 +16,7 @@ $ make client
 - Changeable colors
 - Command help
 - Connected list
+- Private whispers
 - Message timestamps
 
 ## Example
@@ -24,15 +25,16 @@ $ make client
 -- Welcome to lwt-chatroom! Please enter a nickname.
 Joe
 [03/22/19 01:22:06] Joe has joined the chat.
--- --------------------------------------------
+-- ---------------------------------------------------------
 -- Welcome to lwt-chatroom! Commands are below.
--- --------------------------------------------
--- | [q]uit        : Exit chatroom
--- | [h]elp        : Display commands
--- | [l]ist        : List connected clients
--- | [n]ick name   : Change name to [name]
--- | [c]olor color : Change color to [color]
--- --------------------------------------------
+-- ---------------------------------------------------------
+-- [q]uit                 : Exit chatroom
+-- [h]elp                 : Display commands
+-- [l]ist                 : List connected clients
+-- [n]ick name            : Change name to [name]
+-- [c]olor color          : Change color to [color]
+-- [w]hisper name message : Send private [message] to [name]
+-- ---------------------------------------------------------
 -- Where color is one of
 -- - green
 -- - yellow

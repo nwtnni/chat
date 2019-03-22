@@ -26,6 +26,12 @@ let find addr =
   let key = key_of_addr addr in
   Connected.find_opt key !connected
 
+(** Return the connected client with [name], if they exist. *)
+let find_name name =
+  !connected |> Connected.bindings
+             |> List.find_opt (fun (_, (client, _)) -> Client.name client = name)
+             |> function None -> None | Some t -> Some (snd t)
+
 (** Return all connected clients other than those with [addr]. *)
 let sift addr =
   let key = key_of_addr addr in

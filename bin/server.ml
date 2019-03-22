@@ -58,12 +58,13 @@ and listen addr ic =
 (** Parse and execute [command]. *)
 and parse addr command =
   let ws = Str.regexp "[ ]+" in
-  match Str.bounded_split ws command 2 with
-  | ["q"]        | ["quit"]         -> Lwt.fail_with "Disconnected"
-  | ["h"]        | ["help"]         -> help addr
-  | ["l"]        | ["list"]         -> list_names addr
-  | ["n"; name]  | ["nick"; name]   -> change_name addr name
-  | ["c"; color] | ["color"; color] -> change_color addr color
+  match Str.bounded_split ws command 3 with
+  | ["q"]          | ["quit"]             -> Lwt.fail_with "Disconnected"
+  | ["h"]          | ["help"]             -> help addr
+  | ["l"]          | ["list"]             -> list_names addr
+  | ["n"; name]    | ["nick"; name]       -> change_name addr name
+  | ["c"; color]   | ["color"; color]     -> change_color addr color
+  | ["w"; name; m] | ["whisper"; name; m] -> whisper addr name m
   | _ -> broadcast_client addr command
 
 (** Insert the client into the connected list and notify the room. *)
@@ -83,16 +84,17 @@ and disconnect addr =
 and help addr =
   Connected.find addr >> fun (_, oc) ->
   Lwt_io.fprintf oc
-    "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n"
-    "-- --------------------------------------------"
+    "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n"
+    "-- ---------------------------------------------------------"
     (fmt_server "-- Welcome to lwt-chatroom! Commands are below.")
-    "-- --------------------------------------------"
-    "-- | [q]uit        : Exit chatroom"
-    "-- | [h]elp        : Display commands"
-    "-- | [l]ist        : List connected clients"
-    "-- | [n]ick name   : Change name to [name]"
-    "-- | [c]olor color : Change color to [color]"
-    "-- --------------------------------------------"
+    "-- ---------------------------------------------------------"
+    "-- [q]uit                 : Exit chatroom"
+    "-- [h]elp                 : Display commands"
+    "-- [l]ist                 : List connected clients"
+    "-- [n]ick name            : Change name to [name]"
+    "-- [c]olor color          : Change color to [color]"
+    "-- [w]hisper name message : Send private [message] to [name]"
+    "-- ---------------------------------------------------------"
     (Printf.sprintf "-- Where color is one of\n-- - %s\n-- - %s\n-- - %s\n-- - %s\n-- - %s\n-- - %s"
       (AT.sprintf [AT.Bold; AT.green] "green")
       (AT.sprintf [AT.Bold; AT.yellow] "yellow")
@@ -138,6 +140,13 @@ and change_color addr color =
     (fmt_server "has changed their")
     (AT.sprintf [AT.Bold; color'] "color")
   |> broadcast_server
+
+and whisper addr name m =
+  Connected.find addr >> fun (client, oc) ->
+  Connected.find_name name >> fun (client', oc') ->
+  let im = Printf.sprintf "[WHISPER FROM %s]: %s" (fmt_client_name client) m |> fmt_time in
+  let om = Printf.sprintf "[WHISPER TO %s]: %s" (fmt_client_name client') m |> fmt_time in
+  Lwt_io.fprintl oc om >>= fun () -> Lwt_io.fprintl oc' im
 
 (** Attempt to parse a color from unknown string input, using [default] as a fallback. *)
 and parse_color default = function

@@ -22,7 +22,10 @@ and loop socket =
 and accept (file, addr) =
   let ic = Lwt_io.of_fd ~mode:Lwt_io.Input file in
   let oc = Lwt_io.of_fd ~mode:Lwt_io.Output file in
-  Lwt.async (fun () -> initialize addr ic oc);
+  Lwt.async begin fun () -> Lwt.catch
+    (fun () -> initialize addr ic oc)
+    (fun _ -> disconnect addr)
+  end;
   Lwt.return ()
 
 (** Send a welcome message to the client and wait for name registration. *)
@@ -35,7 +38,7 @@ and initialize addr ic oc =
 (** Register the client with the received name. *)
 and register addr ic oc =
   Lwt_io.read_line_opt ic >>= function
-  | None -> disconnect addr
+  | None -> Lwt.fail_with "Disconnected"
   | Some name when Connected.mem name ->
     Printf.sprintf "-- Error: %s is already taken." name
     |> fmt_server
@@ -49,14 +52,14 @@ and register addr ic oc =
 (** Continuously listen for new commands on the channel. *)
 and listen addr ic =
   Lwt_io.read_line_opt ic >>= function
-  | None -> disconnect addr
+  | None -> Lwt.fail_with "Disconnected"
   | Some command -> parse addr command >>= fun () -> listen addr ic
 
 (** Parse and execute [command]. *)
 and parse addr command =
   let ws = Str.regexp "[ ]+" in
   match Str.bounded_split ws command 2 with
-  | ["q"]        | ["quit"]         -> disconnect addr
+  | ["q"]        | ["quit"]         -> Lwt.fail_with "Disconnected"
   | ["h"]        | ["help"]         -> help addr
   | ["l"]        | ["list"]         -> list_names addr
   | ["n"; name]  | ["nick"; name]   -> change_name addr name

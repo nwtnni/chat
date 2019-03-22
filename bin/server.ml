@@ -43,6 +43,7 @@ and register addr ic oc =
     >>= fun () -> register addr ic oc
   | Some name ->
     connect addr name oc
+    >>= fun () -> help addr
     >>= fun () -> listen addr ic
 
 (** Continuously listen for new commands on the channel. *)

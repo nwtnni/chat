@@ -103,6 +103,7 @@ and help name =
       (AT.sprintf [AT.Bold; AT.cyan] "cyan")
       (AT.sprintf [AT.Bold; AT.white] "white"))
 
+(** Respond with the list of online clients. *)
 and list_names name =
   Connected.find name >> fun (_, oc) ->
   let connected = Connected.to_client_list ()
@@ -141,9 +142,12 @@ and change_color name color =
     (AT.sprintf [AT.Bold; color'] "color")
   |> broadcast_server
 
+(** Send private message [m] to user [name']. *)
 and whisper name name' m =
   Connected.find name >> fun (client, oc) ->
-  Connected.find name' >> fun (client', oc') ->
+  Connected.find name' |> function
+  | None -> Lwt_io.fprintl oc (fmt_server (Printf.sprintf "-- Error: %s is not online." name'))
+  | Some (client', oc') ->
   let im = Printf.sprintf "[WHISPER FROM %s]: %s" (fmt_client_name client) m |> fmt_time in
   let om = Printf.sprintf "[WHISPER TO %s]: %s" (fmt_client_name client') m |> fmt_time in
   Lwt_io.fprintl oc om >>= fun () -> Lwt_io.fprintl oc' im

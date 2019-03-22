@@ -1,3 +1,4 @@
 (library
-  (name core)
+  (name chat)
+  (public_name chat)
   (libraries lwt lwt.unix ANSITerminal))

@@ -1,52 +1,10 @@
 open Lwt.Infix
+open Chat
 
 module AT = ANSITerminal
 
-type rx = Lwt_io.input Lwt_io.channel
-type tx = Lwt_io.output Lwt_io.channel
-
-type client = {
-  addr: Unix.sockaddr;
-  name: string;
-  color: AT.style;
-}
-
-(** Global list of connected clients. *)
-let clients: (client * tx) list ref = ref []
-
-(** Return a prettified string with all connected clients in alphabetical order. *)
-let rec get_names () =
-  !clients |> List.map fst
-           |> List.sort (fun a b -> String.compare a.name b.name)
-           |> List.map fmt_client_name
-           |> List.fold_left (fun a b -> a ^ "-- - " ^ b ^ "\n") ""
-
-(** Check whether a name is taken. *)
-and exists_name name' =
-  !clients |> List.map fst
-           |> List.exists (fun client -> client.name = name')
-
-(** Return the connected client with [addr], if they exist. *)
-and get_client addr =
-  List.find_opt (fun (client, _) -> client.addr = addr) !clients
-
-(** Return all connected clients other than those with [addr]. *)
-and get_others (addr: Unix.sockaddr) : (client * tx) list =
-  List.filter (fun (client, _) -> client.addr <> addr) !clients
-
-(** Insert the client into the connected list. *)
-and insert_client (cl: client) (oc: tx) =
-  clients := (cl, oc) :: !clients
-
-(** Remove and return the client from the connected list. *)
-and remove_client (addr: Unix.sockaddr): (client * tx) option =
-  let client = get_client addr in
-  let clients' = get_others addr in
-  clients := clients';
-  client
-
 (** Continously accept new client connections. *)
-and loop socket =
+let rec loop socket =
   Lwt_unix.accept socket >>= accept >>= fun () -> loop socket
 
 (** Accept a new client connection and spawn a listening thread. *)
@@ -67,7 +25,7 @@ and initialize addr ic oc =
 and register addr ic oc =
   Lwt_io.read_line_opt ic >>= function
   | None -> disconnect addr
-  | Some name when exists_name name ->
+  | Some name when Connected.mem name ->
     Printf.sprintf "-- Error: %s is already taken." name
     |> fmt_server
     |> Lwt_io.fprintl oc
@@ -95,19 +53,20 @@ and parse addr command =
 
 (** Insert the client into the connected list and notify the room. *)
 and connect addr name oc =
-  insert_client { addr; name; color = AT.default } oc;
+  let client = Client.make addr name in
+  Connected.insert client oc;
   let join = Printf.sprintf "%s has joined the chat." name in
   broadcast_server join
 
 (** Remove the client from the connected list and notify the room. *)
 and disconnect addr =
-  remove_client addr >> fun (client, _) ->
-  Printf.sprintf "%s has left the chat." client.name
-  |> broadcast_server
+  Connected.remove addr >> fun (client, _) ->
+  let name = Client.name client in
+  Printf.sprintf "%s has left the chat." name |> broadcast_server
 
 (** Send the client a help message. *)
 and help addr =
-  get_client addr >> fun (_, oc) ->
+  Connected.find addr >> fun (_, oc) ->
   Lwt_io.fprintf oc
     "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n"
     "-----------------------------------------------"
@@ -128,33 +87,36 @@ and help addr =
       (AT.sprintf [AT.Bold; AT.white] "white"))
 
 and list_names addr =
-  get_client addr >> fun (_, oc) ->
-  Lwt_io.fprintf oc
+  Connected.find addr >> fun (_, oc) ->
+  let connected = Connected.to_client_list ()
+  |> List.map Client.name
+  |> List.fold_left (fun acc name -> acc ^ "-- " ^ name ^ "\n") ""
+  in Lwt_io.fprintf oc
     "%s\n%s\n%s\n%s"
-    ("------------")
+    ("-- ---------")
     (fmt_server "-- Connected")
-    ("------------")
-    (get_names ())
+    ("-- ---------")
+    connected
 
 (** Change the client's nickname and notify the room. *)
 and change_name addr name' =
-  remove_client addr >> fun (client, oc) ->
-  if exists_name name' then begin
-    insert_client client oc;
+  Connected.remove addr >> fun (client, oc) ->
+  if Connected.mem name' then begin
+    Connected.insert client oc;
     Printf.sprintf "-- Error: %s is already taken." name'
     |> fmt_server
     |> Lwt_io.fprintl oc
   end else begin
-    insert_client { client with name = name' } oc;
+    Connected.insert (Client.with_name client name') oc;
     Printf.sprintf "%s has changed their name to %s." client.name name'
     |> broadcast_server
   end
 
 (** Change the client's color and notify the room. *)
 and change_color addr color =
-  remove_client addr >> fun (client, oc) ->
+  Connected.remove addr >> fun (client, oc) ->
   let color' = parse_color client.color color in
-  insert_client { client with color = color' } oc;
+  Connected.insert (Client.with_color client color') oc;
   Printf.sprintf
     "%s %s %s."
     (fmt_client_name client)
@@ -173,7 +135,7 @@ and parse_color default = function
 | _ -> default
 
 (** Monadic plumbing for disconnected clients. *)
-and (>>) (opt: (client * tx) option) (f: (client * tx) -> unit Lwt.t) : unit Lwt.t =
+and (>>) opt f =
   match opt with 
   | None -> Lwt.return ()
   | Some client -> f client
@@ -186,7 +148,7 @@ and broadcast_server message =
 
 (** Broadcast a message from a client. *)
 and broadcast_client addr message =
-  match get_client addr with
+  match Connected.find addr with
   | None -> Lwt.return ()
   | Some (client, _) ->
     message |> fmt_client client
@@ -195,10 +157,10 @@ and broadcast_client addr message =
 
 (** Broadcast a message to all connected clients. *)
 and broadcast message =
-  !clients |> List.map snd
-           |> List.map (Lwt_io.fprintl)
-           |> List.map (fun write -> write message)
-           |> Lwt.join
+  () |> Connected.to_oc_list
+     |> List.map (Lwt_io.fprintl)
+     |> List.map (fun write -> write message)
+     |> Lwt.join
 
 (** Recolor server announcements. *)
 and fmt_server message =

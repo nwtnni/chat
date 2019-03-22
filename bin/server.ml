@@ -46,26 +46,26 @@ and register addr ic oc =
     >>= fun () -> register addr ic oc
   | Some name ->
     connect addr name oc
-    >>= fun () -> help addr
-    >>= fun () -> listen addr ic
+    >>= fun () -> help name
+    >>= fun () -> listen name ic
 
 (** Continuously listen for new commands on the channel. *)
-and listen addr ic =
+and listen name ic =
   Lwt_io.read_line_opt ic >>= function
   | None -> Lwt.fail_with "Disconnected"
-  | Some command -> parse addr command >>= fun () -> listen addr ic
+  | Some command -> parse name command >>= fun () -> listen name ic
 
 (** Parse and execute [command]. *)
-and parse addr command =
+and parse name command =
   let ws = Str.regexp "[ ]+" in
   match Str.bounded_split ws command 3 with
-  | ["q"]          | ["quit"]             -> Lwt.fail_with "Disconnected"
-  | ["h"]          | ["help"]             -> help addr
-  | ["l"]          | ["list"]             -> list_names addr
-  | ["n"; name]    | ["nick"; name]       -> change_name addr name
-  | ["c"; color]   | ["color"; color]     -> change_color addr color
-  | ["w"; name; m] | ["whisper"; name; m] -> whisper addr name m
-  | _ -> broadcast_client addr command
+  | ["q"]          | ["quit"]               -> Lwt.fail_with "Disconnected"
+  | ["h"]          | ["help"]               -> help name
+  | ["l"]          | ["list"]               -> list_names name
+  | ["n"; name']    | ["nick"; name']       -> change_name name name'
+  | ["c"; color]   | ["color"; color]       -> change_color name color
+  | ["w"; name'; m] | ["whisper"; name'; m] -> whisper name name' m
+  | _ -> broadcast_client name command
 
 (** Insert the client into the connected list and notify the room. *)
 and connect addr name oc =
@@ -76,13 +76,13 @@ and connect addr name oc =
 
 (** Remove the client from the connected list and notify the room. *)
 and disconnect addr =
-  Connected.remove addr >> fun (client, _) ->
+  Connected.remove_addr addr >> fun (client, _) ->
   let name = Client.name client in
   Printf.sprintf "%s has left the chat." name |> broadcast_server
 
 (** Send the client a help message. *)
-and help addr =
-  Connected.find addr >> fun (_, oc) ->
+and help name =
+  Connected.find name >> fun (_, oc) ->
   Lwt_io.fprintf oc
     "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n"
     "-- ---------------------------------------------------------"
@@ -103,8 +103,8 @@ and help addr =
       (AT.sprintf [AT.Bold; AT.cyan] "cyan")
       (AT.sprintf [AT.Bold; AT.white] "white"))
 
-and list_names addr =
-  Connected.find addr >> fun (_, oc) ->
+and list_names name =
+  Connected.find name >> fun (_, oc) ->
   let connected = Connected.to_client_list ()
   |> List.map Client.name
   |> List.fold_left (fun acc name -> acc ^ "-- " ^ name ^ "\n") ""
@@ -116,8 +116,8 @@ and list_names addr =
     connected
 
 (** Change the client's nickname and notify the room. *)
-and change_name addr name' =
-  Connected.remove addr >> fun (client, oc) ->
+and change_name name name' =
+  Connected.remove name >> fun (client, oc) ->
   if Connected.mem name' then begin
     Connected.insert client oc;
     Printf.sprintf "-- Error: %s is already taken." name'
@@ -130,8 +130,8 @@ and change_name addr name' =
   end
 
 (** Change the client's color and notify the room. *)
-and change_color addr color =
-  Connected.remove addr >> fun (client, oc) ->
+and change_color name color =
+  Connected.remove name >> fun (client, oc) ->
   let color' = parse_color client.color color in
   Connected.insert (Client.with_color client color') oc;
   Printf.sprintf
@@ -141,9 +141,9 @@ and change_color addr color =
     (AT.sprintf [AT.Bold; color'] "color")
   |> broadcast_server
 
-and whisper addr name m =
-  Connected.find addr >> fun (client, oc) ->
-  Connected.find_name name >> fun (client', oc') ->
+and whisper name name' m =
+  Connected.find name >> fun (client, oc) ->
+  Connected.find name' >> fun (client', oc') ->
   let im = Printf.sprintf "[WHISPER FROM %s]: %s" (fmt_client_name client) m |> fmt_time in
   let om = Printf.sprintf "[WHISPER TO %s]: %s" (fmt_client_name client') m |> fmt_time in
   Lwt_io.fprintl oc om >>= fun () -> Lwt_io.fprintl oc' im
@@ -161,7 +161,7 @@ and parse_color default = function
 (** Monadic plumbing for disconnected clients. *)
 and (>>) opt f =
   match opt with 
-  | None -> Lwt.return ()
+  | None -> Lwt.fail_with "Disconnected"
   | Some client -> f client
 
 (** Broadcast a message from the server. *)

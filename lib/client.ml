@@ -19,5 +19,8 @@ let with_color client color =
 let name client =
   client.name
 
+let addr client =
+  client.addr
+
 let to_string client =
   client.name

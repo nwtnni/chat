@@ -53,19 +53,26 @@ and register addr ic oc =
 and listen name ic =
   Lwt_io.read_line_opt ic >>= function
   | None -> Lwt.fail_with "Disconnected"
-  | Some command -> parse name command >>= fun () -> listen name ic
+  | Some command -> parse name command >>= fun name' -> listen name' ic
 
 (** Parse and execute [command]. *)
 and parse name command =
   let ws = Str.regexp "[ ]+" in
   match Str.bounded_split ws command 3 with
-  | ["q"]          | ["quit"]               -> Lwt.fail_with "Disconnected"
-  | ["h"]          | ["help"]               -> help name
-  | ["l"]          | ["list"]               -> list_names name
-  | ["n"; name']    | ["nick"; name']       -> change_name name name'
-  | ["c"; color]   | ["color"; color]       -> change_color name color
-  | ["w"; name'; m] | ["whisper"; name'; m] -> whisper name name' m
-  | _ -> broadcast_client name command
+  | ["q"] | ["quit"] ->
+    Lwt.fail_with "Disconnected"
+  | ["h"] | ["help"] ->
+    help name >|= fun () -> name
+  | ["l"] | ["list"] ->
+    list_names name >|= fun () -> name
+  | ["n"; name'] | ["nick"; name'] ->
+    change_name name name' >|= fun () -> name'
+  | ["c"; color] | ["color"; color] ->
+    change_color name color >|= fun () -> name
+  | ["w"; name'; m] | ["whisper"; name'; m] ->
+    whisper name name' m >|= fun () -> name
+  | _ ->
+    broadcast_client name command >|= fun () -> name
 
 (** Insert the client into the connected list and notify the room. *)
 and connect addr name oc =

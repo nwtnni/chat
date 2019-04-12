@@ -192,6 +192,7 @@ and broadcast_client addr message =
 
 (** Broadcast a message to all connected clients. *)
 and broadcast message =
+  print_endline message;
   () |> Connected.to_oc_list
      |> List.map (Lwt_io.fprintl)
      |> List.map (fun write -> write message)
